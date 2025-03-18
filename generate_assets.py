@@ -317,81 +317,45 @@ def generate_fold(width=800, height=1100, output_path=None):
     
     # Generate fold based on type
     if fold_type == 'horizontal':
-        # Position de pli horizontal
-        y_pos = random.randint(height // 4, 3 * height // 4)
-        
-        # Dessiner une ligne principale
+        # Position horizontale du pli
+        y = random.randint(height//4, 3*height//4)
         line_width = random.randint(2, 4)
-        draw.line([(0, y_pos), (width, y_pos)], fill=color, width=line_width)
         
-        # Ajouter des ombres
-        shadow_width = random.randint(10, 25)
-        for i in range(shadow_width):
-            # Intensité de l'ombre diminue avec la distance
-            shadow_alpha = int(color_alpha * (1 - i / shadow_width))
-            shadow_color = (color_base, color_base, color_base, shadow_alpha)
-            
-            # Ombre vers le haut
-            draw.line([(0, y_pos - i), (width, y_pos - i)], fill=shadow_color, width=1)
-            
-            # Ombre vers le bas (moins prononcée)
-            if i < shadow_width // 2:
-                draw.line([(0, y_pos + i), (width, y_pos + i)], fill=shadow_color, width=1)
+        # Dessiner la ligne horizontale
+        draw.line([(0, y), (width, y)], fill=color, width=line_width)
+        
+        # Ajouter une ombre au pli
+        for i in range(1, 5):
+            shadow_color = (color[0], color[1], color[2], color[3]//2)
+            draw.line([(0, y+i), (width, y+i)], fill=shadow_color, width=1)
     
     elif fold_type == 'vertical':
-        # Position de pli vertical
-        x_pos = random.randint(width // 4, 3 * width // 4)
-        
-        # Dessiner une ligne principale
+        # Position verticale du pli
+        x = random.randint(width//4, 3*width//4)
         line_width = random.randint(2, 4)
-        draw.line([(x_pos, 0), (x_pos, height)], fill=color, width=line_width)
         
-        # Ajouter des ombres
-        shadow_width = random.randint(10, 25)
-        for i in range(shadow_width):
-            # Intensité de l'ombre diminue avec la distance
-            shadow_alpha = int(color_alpha * (1 - i / shadow_width))
-            shadow_color = (color_base, color_base, color_base, shadow_alpha)
-            
-            # Ombre vers la gauche
-            draw.line([(x_pos - i, 0), (x_pos - i, height)], fill=shadow_color, width=1)
-            
-            # Ombre vers la droite (moins prononcée)
-            if i < shadow_width // 2:
-                draw.line([(x_pos + i, 0), (x_pos + i, height)], fill=shadow_color, width=1)
+        # Dessiner la ligne verticale
+        draw.line([(x, 0), (x, height)], fill=color, width=line_width)
+        
+        # Ajouter une ombre au pli
+        for i in range(1, 5):
+            shadow_color = (color[0], color[1], color[2], color[3]//2)
+            draw.line([(x+i, 0), (x+i, height)], fill=shadow_color, width=1)
     
     elif fold_type == 'diagonal':
-        # Points de départ et fin pour la diagonale
-        start_x, start_y = 0, 0
-        end_x, end_y = width, height
-        
-        # 50% de chance de changer l'orientation de la diagonale
-        if random.random() > 0.5:
-            start_y, end_y = height, 0
-        
-        # Dessiner une ligne principale
-        line_width = random.randint(2, 4)
-        draw.line([(start_x, start_y), (end_x, end_y)], fill=color, width=line_width)
-        
-        # Ajouter des ombres (plus complexe pour les diagonales)
-        shadow_width = random.randint(8, 15)
-        for i in range(shadow_width):
-            # Intensité de l'ombre diminue avec la distance
-            shadow_alpha = int(color_alpha * (1 - i / shadow_width))
-            shadow_color = (color_base, color_base, color_base, shadow_alpha)
-            
-            # Calculer l'offset perpendiculaire
-            dx, dy = end_x - start_x, end_y - start_y
-            length = math.sqrt(dx*dx + dy*dy)
-            perpendicular_x, perpendicular_y = -dy/length, dx/length
-            
-            # Dessiner l'ombre avec un offset
-            offset_x = perpendicular_x * i
-            offset_y = perpendicular_y * i
-            draw.line([
-                (start_x + offset_x, start_y + offset_y),
-                (end_x + offset_x, end_y + offset_y)
-            ], fill=shadow_color, width=1)
+        # Pli diagonal
+        if random.choice([True, False]):
+            draw.line([(0, 0), (width, height)], fill=color, width=random.randint(2, 4))
+            # Ajouter une ombre au pli
+            for i in range(1, 5):
+                shadow_color = (color[0], color[1], color[2], color[3]//2)
+                draw.line([(i, i), (width, height)], fill=shadow_color, width=1)
+        else:
+            draw.line([(width, 0), (0, height)], fill=color, width=random.randint(2, 4))
+            # Ajouter une ombre au pli
+            for i in range(1, 5):
+                shadow_color = (color[0], color[1], color[2], color[3]//2)
+                draw.line([(width-i, i), (0, height)], fill=shadow_color, width=1)
     
     else:  # corner fold
         # Coin du papier plié
@@ -413,6 +377,11 @@ def generate_fold(width=800, height=1100, output_path=None):
         
         # Ligne de pli
         draw.line([points[1], points[2]], fill=color, width=random.randint(1, 3))
+        
+        # Important: Modifier le nom du fichier si output_path est fourni
+        if output_path:
+            # Renommer pour inclure "corner" dans le nom du fichier
+            output_path = output_path.replace("fold_", f"corner_fold_{corner}_")
     
     # Appliquer un léger flou
     img = img.filter(ImageFilter.GaussianBlur(radius=0.5))
@@ -556,8 +525,43 @@ def main():
     
     # Generate fold effects
     print("Generating fold effects...")
-    for i in range(10):
+    # Générer des plis normaux (horizontaux, verticaux, diagonaux)
+    for i in range(6):
         generate_fold(output_path=os.path.join(FOLDS_DIR, f"fold_{i+1}.png"))
+    
+    # Générer explicitement des plis de coin
+    print("Generating corner fold effects...")
+    corners = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
+    for corner in corners:
+        output_path = os.path.join(FOLDS_DIR, f"corner_fold_{corner}.png")
+        img = Image.new('RGBA', (800, 1100), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(img)
+        
+        # Paramètres du pli
+        width, height = 800, 1100
+        color_base = random.randint(20, 60)
+        color_alpha = random.randint(30, 90)
+        color = (color_base, color_base, color_base, color_alpha)
+        fold_size = random.randint(width//10, width//5)
+        
+        # Déterminer les points selon le coin
+        if corner == 'top-left':
+            points = [(0, 0), (fold_size, 0), (0, fold_size)]
+        elif corner == 'top-right':
+            points = [(width, 0), (width - fold_size, 0), (width, fold_size)]
+        elif corner == 'bottom-left':
+            points = [(0, height), (fold_size, height), (0, height - fold_size)]
+        else:  # bottom-right
+            points = [(width, height), (width - fold_size, height), (width, height - fold_size)]
+        
+        # Dessiner le coin plié
+        draw.polygon(points, fill=(240, 240, 240, 200), outline=color)
+        draw.line([points[1], points[2]], fill=color, width=random.randint(1, 3))
+        
+        # Appliquer un léger flou et sauvegarder
+        img = img.filter(ImageFilter.GaussianBlur(radius=0.5))
+        img.save(output_path)
+        print(f"Saved corner fold to {output_path}")
     
     # Generate paper textures
     print("Generating paper textures...")

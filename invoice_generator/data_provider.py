@@ -125,3 +125,7 @@ class DataProvider:
             return self.telecom_companies, self.telecom_items
         else:  # healthcare
             return self.healthcare_companies, self.healthcare_items
+
+    def get_fallback_company_name(self):
+        """Return a fallback company name in case no specific ones are available"""
+        return f"{fake.company()} {fake.company_suffix()}"

@@ -1,0 +1,169 @@
+Amélioration de l'accuracy pour votre modèle LayoutLM
+L'accuracy de 85% est correcte mais peut être améliorée. Voici plusieurs stratégies efficaces:
+
+Comprendre les epochs
+Un "epoch" est un passage complet de toutes vos données d'entraînement à travers le réseau. Voici ce qui se passe:
+
+Au premier epoch: le modèle découvre les données
+Aux epochs suivants: il affine sa compréhension
+Après plusieurs epochs: il risque de mémoriser plutôt que généraliser
+
+Comment améliorer l'accuracy
+1. Augmenter le nombre d'epochs
+
+model.train_classifier(
+    train_dir, val_dir,
+    epochs=8,  # Augmenter de 3-5 à 8-10
+    batch_size=1,
+    learning_rate=3e-05
+)
+
+2. Ajouter plus de données
+Plus d'exemples: Augmentez votre dataset de 30-50%
+Diversité: Incluez plus de types de factures et de documents non-factures
+Exemples difficiles: Ajoutez spécifiquement des cas où le modèle fait des erreurs
+
+3. Augmentation des données (très efficace)
+
+# Ajouter dans InvoiceDataset.__getitem__
+from torchvision import transforms
+
+# Augmentations légères pour documents
+augmentations = transforms.Compose([
+    transforms.ColorJitter(brightness=0.1, contrast=0.1),
+    transforms.RandomRotation(degrees=2),  # Rotation légère
+    transforms.RandomAffine(degrees=0, translate=(0.05, 0.05))  # Décalage léger
+])
+
+# Appliquer avec probabilité de 50%
+if random.random() > 0.5:
+    img = augmentations(img)
+
+4. Ajuster les hyperparamètres
+Learning rate: Essayez 1e-5 au lieu de 3e-5
+Learning rate scheduler: Réduire le LR avec les epochs
+
+from torch.optim.lr_scheduler import ReduceLROnPlateau
+scheduler = ReduceLROnPlateau(optimizer, 'min', patience=1, factor=0.5)
+# Puis dans la boucle de validation:
+scheduler.step(val_loss)
+
+5. Équilibrer votre dataset
+Assurez-vous d'avoir un nombre similaire de factures et non-factures
+Vérifiez la distribution des classes:
+
+n_positives = sum(train_dataset.labels)
+n_negatives = len(train_dataset.labels) - n_positives
+print(f"Positifs: {n_positives}, Négatifs: {n_negatives}")
+
+
+Recommandation prioritaire
+Commencez par augmenter le nombre d'epochs à 6-8 et implémenter l'augmentation de données. 
+Ce sont les deux mesures les plus simples et souvent les plus efficaces pour améliorer la performance.
+
+
+
+Donner des "clues" explicites au modèle
+Option 1: Laisser le modèle apprendre seul (approche actuelle)
+LayoutLM est déjà conçu pour apprendre ces associations automatiquement. Avec suffisamment de données, il détectera que:
+
+Les mots "FACTURE", "TVA", etc. sont fortement corrélés avec les factures
+La disposition spatiale des informations est également importante
+
+Option 2: Approche hybride (recommandée)
+Vous pouvez combiner le modèle deep learning avec quelques règles simples:
+
+def classify_document(document_path):
+    # 1. Utiliser le modèle LayoutLM pour obtenir une prédiction initiale
+    processed = processor.process_document(document_path)
+    model_prediction = model.predict(processed)
+    model_score = model_prediction["score"]
+    
+    # 2. Appliquer quelques règles pour renforcer/ajuster la prédiction
+    text_content = " ".join(processed["words"]).lower()
+    
+    # Indices forts pour une facture
+    invoice_keywords = ["facture", "acquittée", "payée", "règlement", "échéance"]
+    invoice_score = sum(1 for word in invoice_keywords if word in text_content)
+    
+    # Indices forts pour un devis
+    quote_keywords = ["devis", "proposition", "estimation", "validité", "bon pour accord"]
+    quote_score = sum(1 for word in quote_keywords if word in text_content)
+    
+    # Ajuster le score final
+    final_score = model_score * 0.8 + (invoice_score - quote_score) * 0.2
+    
+    return final_score > 0.5  # Seuil de décision
+
+
+
+dans generator.py
+
+4. Ajuster la proportion des devis (optionnel)
+Si vous voulez vous assurer que les devis représentent une bonne partie des documents non-factures 
+(puisqu'ils sont des "hard negatives" très proches des factures), vous pouvez modifier la méthode
+
+def _create_non_invoice_batch(self, count, output_dir, doc_generators):
+    """Generate a batch of non-invoice documents"""
+    os.makedirs(output_dir, exist_ok=True)
+    
+    for i in range(count):
+        # Donner une probabilité plus élevée aux devis (33% au lieu de 20%)
+        if random.random() < 0.33 and "quote" in doc_generators:
+            doc_type = "quote"
+            generator = doc_generators[doc_type]
+        else:
+            # Sélectionner parmi les autres types de documents
+            available_types = [t for t in doc_generators.keys() if t != "quote"]
+            doc_type = random.choice(available_types)
+            generator = doc_generators[doc_type]
+            
+        output_path = os.path.join(output_dir, f"{doc_type}_{i+1}.jpg")
+        generator.generate_document(output_path)
+
+
+
+Ce que montrent vos résultats
+
+Epoch 1 - Validation Loss: 0.3907, Accuracy: 0.8500
+Epoch 2 - Validation Loss: 0.3091, Accuracy: 0.8500
+Epoch 3 - Validation Loss: 0.3113, Accuracy: 0.8500
+Epoch 4 - Validation Loss: 0.2839, Accuracy: 0.8500
+
+
+Je remarque deux choses importantes:
+
+La loss diminue - C'est positif! Votre modèle devient plus confiant dans ses prédictions
+L'accuracy plafonne - Elle reste bloquée exactement à 85%
+Pourquoi ce plafonnement?
+Ce phénomène est assez courant et s'explique par:
+
+Échantillons "difficiles": Votre modèle améliore sa confiance sur les exemples qu'il classifie déjà correctement, mais les 15% d'erreurs persistantes sont probablement des cas difficiles.
+
+Ensemble de validation trop petit: Si vous n'avez que 20 échantillons de validation, chaque exemple représente 5%. Un changement d'accuracy nécessiterait de corriger plusieurs erreurs.
+
+Déséquilibre des classes: Le modèle pourrait adopter une stratégie biaisée.
+
+Solutions recommandées
+Pour dépasser ce plateau de 85%:
+
+Ajouter des devis comme vous le prévoyez - c'est une excellente idée
+
+Augmenter la taille du dataset de validation - idéalement 50+ exemples
+
+Ajouter des échantillons "confondants":
+
+# Dans votre code de génération
+# Créer des factures avec des caractéristiques de devis et vice-versa
+invoice = invoice_generator.generate_similar_to_quote()
+quote = quote_generator.generate_similar_to_invoice()
+
+Implémenter une technique de pondération des échantillons difficiles:
+
+# Focus sur les échantillons difficiles
+loss = criterion(outputs, labels)
+if loss.item() > threshold:  # Échantillon difficile
+    loss = loss * 1.5  # Augmenter l'importance
+
+Cette combinaison d'approches devrait vous permettre de franchir la barre des 90% d'accuracy.
+

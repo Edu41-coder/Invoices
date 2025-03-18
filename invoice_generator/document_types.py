@@ -396,7 +396,7 @@ class FormGenerator(DocumentGenerator):
         elif random.random() < 0.3:  # Ajouter des montants à d'autres formulaires parfois
             price_field = random.choice([
                 ("Montant estimé:", f"{random.uniform(100, 10000):.2f} EUR"),
-                ("Budget alloué:", f"{random.uniform(1000, 50000)::.2f} EUR"),
+                ("Budget alloué:", f"{random.uniform(1000, 50000):.2f} EUR"),
                 ("Coût total:", f"{random.uniform(500, 20000):.2f} EUR"),
                 ("Prix de référence:", f"{random.uniform(50, 2000):.2f} EUR")
             ])
@@ -420,6 +420,172 @@ class FormGenerator(DocumentGenerator):
         pdf.cell(0, 8, "Date: ________________", 0, 1)
         pdf.cell(0, 8, "Signature:", 0, 1)
         pdf.cell(80, 20, "", 1)
+        
+        # Output PDF
+        pdf.output(pdf_path)
+
+
+class QuoteGenerator(DocumentGenerator):
+    """Generates business quotes/estimates"""
+    
+    def generate_document(self, output_path, apply_defects=True, add_handwriting=True):
+        """Generate a business quote"""
+        return self._create_pdf_and_convert(
+            self._create_quote_pdf, 
+            output_path,
+            apply_defects,
+            add_handwriting
+        )
+    
+    def _create_quote_pdf(self, pdf_path):
+        """Create a PDF quote/estimate"""
+        # Create a PDF
+        pdf = FPDF()
+        pdf.add_page()
+        
+        # Choose random font
+        font = random.choice(["Helvetica", "Times", "Courier"])
+        
+        # Header - use different terms for quote to differentiate from invoices
+        title = random.choice(["DEVIS", "ESTIMATION", "PROPOSITION COMMERCIALE", "OFFRE DE PRIX"])
+        pdf.set_font(font, 'B', 18)
+        pdf.cell(0, 10, title, ln=True, align='C')
+        pdf.set_font(font, 'I', 10)
+        pdf.cell(0, 5, f"Référence: DEV-{random.randint(10000, 99999)}", ln=True, align='C')
+        
+        # Company info
+        pdf.ln(5)
+        pdf.set_font(font, 'B', 12)
+        if self.data_provider:
+            company = random.choice(self.data_provider.company_names)
+        else:
+            company = fake.company()
+        pdf.cell(0, 8, company, ln=True)
+        pdf.set_font(font, '', 10)
+        pdf.cell(0, 5, fake.street_address(), ln=True)
+        pdf.cell(0, 5, f"{fake.postcode()} {fake.city()}", ln=True)
+        pdf.cell(0, 5, f"Tel: {fake.phone_number()}", ln=True)
+        pdf.cell(0, 5, f"Email: {fake.email()}", ln=True)
+        
+        # Client info
+        pdf.ln(10)
+        pdf.set_font(font, 'B', 11)
+        pdf.cell(0, 8, "CLIENT:", ln=True)
+        pdf.set_font(font, '', 10)
+        pdf.cell(0, 5, fake.name(), ln=True)
+        pdf.cell(0, 5, fake.company(), ln=True)
+        pdf.multi_cell(0, 5, fake.address())
+        
+        # Dates and validity
+        pdf.ln(10)
+        today = datetime.now()
+        validity_days = random.choice([30, 60, 90])
+        validity_date = today + timedelta(days=validity_days)
+        
+        pdf.set_font(font, '', 10)
+        col_width = pdf.w / 2
+        
+        pdf.cell(col_width, 6, f"Date d'émission: {today.strftime('%d/%m/%Y')}", 0, 0)
+        pdf.cell(col_width, 6, f"Validité: {validity_date.strftime('%d/%m/%Y')}", 0, 1, align='R')
+        
+        # Description du projet
+        pdf.ln(5)
+        pdf.set_font(font, 'B', 11)
+        pdf.cell(0, 8, "DESCRIPTION DU PROJET:", ln=True)
+        pdf.set_font(font, '', 10)
+        pdf.multi_cell(0, 5, fake.paragraph(nb_sentences=3))
+        
+        # Items table
+        pdf.ln(10)
+        pdf.set_font(font, 'B', 10)
+        
+        # Table headers
+        headers = ["Description", "Qté", "Prix unitaire", "Total"]
+        col_widths = [90, 20, 40, 40] # Adjust based on your preference
+        
+        # Draw header with color
+        pdf.set_fill_color(230, 230, 230)
+        for i, header in enumerate(headers):
+            pdf.cell(col_widths[i], 8, header, 1, 0, 'C', True)
+        pdf.ln()
+        
+        # Draw items
+        pdf.set_font(font, '', 9)
+        total = 0
+        
+        # Generate random items
+        num_items = random.randint(3, 7)
+        for i in range(num_items):
+            descriptions = [
+                "Développement site web responsive",
+                "Création identité visuelle",
+                "Maintenance annuelle",
+                "Formation personnel",
+                "Audit sécurité",
+                "Campagne marketing digital",
+                "Intégration CRM",
+                "Hébergement cloud",
+                "Conception application mobile",
+                "Étude de marché",
+                "Consulting stratégique",
+                "Design d'interface utilisateur"
+            ]
+            
+            desc = random.choice(descriptions)
+            qty = random.randint(1, 10)
+            unit_price = random.randint(100, 2000)
+            item_total = qty * unit_price
+            total += item_total
+            
+            # Print item
+            pdf.cell(col_widths[0], 7, desc, 1)
+            pdf.cell(col_widths[1], 7, str(qty), 1, 0, 'C')
+            pdf.cell(col_widths[2], 7, f"{unit_price:.2f} EUR", 1, 0, 'R')
+            pdf.cell(col_widths[3], 7, f"{item_total:.2f} EUR", 1, 1, 'R')
+        
+        # Totals
+        pdf.ln(5)
+        tva_rate = random.choice([5.5, 10.0, 20.0])
+        tva_amount = total * (tva_rate / 100)
+        total_ttc = total + tva_amount
+        
+        pdf.set_x(pdf.w - 100)
+        pdf.set_font(font, '', 10)
+        pdf.cell(60, 7, "Total HT:", 0, 0)
+        pdf.cell(40, 7, f"{total:.2f} EUR", 0, 1, 'R')
+        
+        pdf.set_x(pdf.w - 100)
+        pdf.cell(60, 7, f"TVA ({tva_rate}%):", 0, 0)
+        pdf.cell(40, 7, f"{tva_amount:.2f} EUR", 0, 1, 'R')
+        
+        pdf.set_x(pdf.w - 100)
+        pdf.set_font(font, 'B', 10)
+        pdf.cell(60, 7, "Total TTC:", 0, 0)
+        pdf.cell(40, 7, f"{total_ttc:.2f} EUR", 0, 1, 'R')
+        
+        # Conditions
+        pdf.ln(10)
+        pdf.set_font(font, 'B', 10)
+        pdf.cell(0, 7, "CONDITIONS DU DEVIS:", ln=True)
+        pdf.set_font(font, '', 9)
+        
+        conditions = [
+            f"Ce devis est valable {validity_days} jours à compter de sa date d'émission.",
+            "Le paiement s'effectue selon les modalités suivantes: 30% à la commande, solde à la livraison.",
+            "Délai d'exécution estimé: " + str(random.randint(10, 60)) + " jours ouvrés après acceptation.",
+            "Ce document est un devis et ne constitue pas une facture."
+        ]
+        
+        for condition in conditions:
+            pdf.cell(10, 5, "-", 0, 0)
+            pdf.multi_cell(0, 5, condition)
+        
+        # Signature area
+        pdf.ln(10)
+        pdf.cell(0, 6, "Date et signature précédées de la mention 'Bon pour accord':", ln=True)
+        
+        # Draw signature box
+        pdf.rect(10, pdf.get_y(), 90, 30)
         
         # Output PDF
         pdf.output(pdf_path)

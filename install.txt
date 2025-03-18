@@ -1,0 +1,12 @@
+pip install faker fpdf2
+
+pip install pdf2image Pillow numpy
+
+pip install pdf2image poppler-utils
+
+`pip install opencv-python
+
+Pour Windows, vous devrez également installer Poppler:
+
+Téléchargez Poppler pour Windows
+Extrayez-le et ajoutez le dossier bin au PATH système

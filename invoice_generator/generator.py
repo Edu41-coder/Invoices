@@ -12,7 +12,8 @@ from invoice_generator.document_types import (
     LetterGenerator, 
     MemoGenerator, 
     ReportGenerator, 
-    FormGenerator
+    FormGenerator,
+    QuoteGenerator
 )
 from invoice_generator.config import LAYOUTS, OUTPUT_DIRS, FONTS
 
@@ -30,13 +31,32 @@ class InvoiceGenerator:
         self.memo_generator = MemoGenerator(self.data_provider, self.image_effects)
         self.report_generator = ReportGenerator(self.data_provider, self.image_effects)
         self.form_generator = FormGenerator(self.data_provider, self.image_effects)
+        self.quote_generator = QuoteGenerator(self.data_provider, self.image_effects)  # Ajouter cette ligne
+        
+        # S'assurer que output_base contient "dataset"
+        if output_base == ".":
+            output_base = "dataset"
+        elif not output_base.endswith("dataset"):
+            output_base = os.path.join(output_base, "dataset")
         
         # Set output directory
         self.output_base = output_base
-        self.dirs = {
-            key: os.path.join(self.output_base, value.split('/')[-1]) 
-            for key, value in OUTPUT_DIRS.items()
+        
+        # Définir les chemins directement dans l'instance (plus propre)
+        self.output_dirs = {
+            "original": os.path.join(output_base, "original"),
+            "training_invoices": os.path.join(output_base, "training", "invoices"),
+            "training_non_invoices": os.path.join(output_base, "training", "non_invoices"),
+            "validation_invoices": os.path.join(output_base, "validation", "invoices"),
+            "validation_non_invoices": os.path.join(output_base, "validation", "non_invoices"),
+            "test_invoices": os.path.join(output_base, "test", "invoices"),
+            "test_non_invoices": os.path.join(output_base, "test", "non_invoices"),
+            "sample": os.path.join(output_base, "sample"),
+            "temp": os.path.join(output_base, "temp")
         }
+        
+        # Utiliser cette structure pour les autres méthodes
+        self.dirs = self.output_dirs
         
         # Create output directories
         for dir_name in self.dirs.values():
@@ -74,44 +94,63 @@ class InvoiceGenerator:
     
     def _generate_batch(self, count, output_dir, defect_prob=0.5, handwriting_prob=0.3):
         """Generate a batch of invoices with the specified probabilities of defects and handwriting"""
+        os.makedirs(output_dir, exist_ok=True)  # S'assurer que le répertoire existe
+        
         for i in range(count):
-            # Pick company type
-            company_type = random.choice(['diy', 'tech', 'retail', 'insurance', 'telecom', 'healthcare'])
-            
-            # Get appropriate companies and items for this type
-            companies, items = self.data_provider.get_items_for_company_type(company_type)
-            company_name = random.choice(companies)
-            
-            # Generate invoice data
-            invoice_num = f"INV-{random.randint(10000, 99999)}"
-            date = (datetime.now() - timedelta(days=random.randint(1, 365))).strftime("%d/%m/%Y")
-            client_name = fake.name()
-            client_address = fake.address().replace('\n', ', ')
-            
-            # Choose layout and format
-            layout = random.choice(LAYOUTS)
-            output_format = random.choice(["pdf", "jpg", "jpeg"])
-            
-            # Generate PDF invoice
-            pdf_path = os.path.join(self.dirs["temp"], f"temp_{invoice_num}.pdf")
-            
-            # Transformer les chaînes en dictionnaires avec les propriétés attendues
-            formatted_items = []
-            for item in items:
-                formatted_items.append({
-                    "description": item,
-                    "amount": random.randint(1, 10),
-                    "unit_price": round(random.uniform(10, 500), 2)
-                })
+            try:
+                # Pick company type
+                company_type = random.choice(['diy', 'tech', 'retail', 'insurance', 'telecom', 'healthcare'])
+                
+                # Get appropriate companies and items for this type
+                companies, items = self.data_provider.get_items_for_company_type(company_type)
+                
+                # Vérifier que nous avons bien des entreprises et des articles
+                if not companies:
+                    companies = [self.data_provider.get_fallback_company_name()]
+                    print(f"Warning: No companies for type {company_type}, using fallback")
+                
+                if not items or len(items) < 1:
+                    items = [f"Service {company_type} standard", f"Produit {company_type} basique"]
+                    print(f"Warning: No items for type {company_type}, using fallback items")
+                
+                company_name = random.choice(companies)
+                
+                # Generate invoice data
+                invoice_num = f"INV-{random.randint(10000, 99999)}"
+                date = (datetime.now() - timedelta(days=random.randint(1, 365))).strftime("%d/%m/%Y")
+                client_name = fake.name()
+                client_address = fake.address().replace('\n', ', ')
+                
+                # Choose layout and format
+                layout = random.choice(LAYOUTS)
+                output_format = random.choice(["jpg", "jpeg"])  # Force JPEG pour l'entraînement
+                
+                # Generate PDF invoice
+                pdf_path = os.path.join(self.dirs["temp"], f"temp_{invoice_num}.pdf")
+                
+                # Transformer les chaînes en dictionnaires avec les propriétés attendues
+                formatted_items = []
+                for item in items:
+                    formatted_items.append({
+                        "description": item,
+                        "amount": random.randint(1, 10),
+                        "unit_price": round(random.uniform(10, 500), 2)
+                    })
+                    
+                # S'assurer qu'au moins un article est présent
+                if not formatted_items:
+                    formatted_items = [{
+                        "description": "Article standard",
+                        "amount": 1,
+                        "unit_price": 100.00
+                    }]
 
-            self.invoice_pdf.generate_invoice_pdf(
-                company_name, company_type, invoice_num, date,
-                client_name, client_address, formatted_items, layout, pdf_path
-            )
-            
-            # Convert to image if needed
-            if output_format != "pdf":
-                # Convert PDF to image
+                self.invoice_pdf.generate_invoice_pdf(
+                    company_name, company_type, invoice_num, date,
+                    client_name, client_address, formatted_items, layout, pdf_path
+                )
+                
+                # Convert to image
                 img_path = os.path.join(output_dir, f"invoice_{i+1}.{output_format}")
                 apply_defects = random.random() < defect_prob
                 add_handwriting = random.random() < handwriting_prob
@@ -123,12 +162,12 @@ class InvoiceGenerator:
                 )
                 
                 # Remove the temporary PDF
-                os.remove(pdf_path)
-            else:
-                # Just copy the PDF to the output directory
-                dest_path = os.path.join(output_dir, f"invoice_{i+1}.pdf")
-                shutil.copy(pdf_path, dest_path)
-                os.remove(pdf_path)
+                if os.path.exists(pdf_path):
+                    os.remove(pdf_path)
+                    
+            except Exception as e:
+                print(f"Error generating invoice {i+1}: {str(e)}")
+                continue  # Passer à la facture suivante
     
     def create_non_invoice_documents(self, count=100, split=(0.7, 0.15, 0.15)):
         """Generate non-invoice documents distributed across training/validation/test"""
@@ -146,7 +185,8 @@ class InvoiceGenerator:
             "letter": self.letter_generator,
             "memo": self.memo_generator,
             "report": self.report_generator,
-            "form": self.form_generator
+            "form": self.form_generator,
+            "quote": self.quote_generator  # Ajouter cette ligne
         }
         
         # Generate for training set

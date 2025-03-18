@@ -1,0 +1,57 @@
+python -m invoice_generator.main --num 100 --non-invoices 50
+
+
+
+Utilisation du script 
+Pour entraîner le classificateur uniquement:
+
+python training.py --train_dir dataset/training --val_dir dataset/validation --clean
+
+Pour entraîner le classificateur et le modèle NER:
+
+python training.py --train_dir dataset/training --val_dir dataset/validation --clean --train_ner
+
+
+Pour spécifier explicitement le répertoire des documents non-factures:
+
+python training.py --train_dir dataset/training --val_dir dataset/validation --negative_dir dataset/training/non_invoices
+
+
+Commandes pour lancer l'entraînement et l'inférence du modèle
+1. Nettoyer et préparer les données
+Commencez par nettoyer votre dataset pour éliminer les images vides 
+
+python training.py --train_dir dataset/training --val_dir dataset/validation --clean
+
+2. Entraîner le modèle de classification (facture/non-facture)
+Cette commande lance l'entraînement du modèle de classification sur le dataset généré :
+
+
+python training.py --train_dir dataset/training --val_dir dataset/validation --model_dir model_output --epochs 5 --batch_size 4 --learning_rate 3e-5 --clean
+
+Si vous avez un GPU, l'entraînement sera beaucoup plus rapide. Pour un petit dataset, ça peut prendre 10-20 minutes sur CPU.
+
+3. Entraîner également le modèle NER (extraction des champs)
+Pour entraîner aussi le modèle d'extraction des champs (bien que sans annotations réelles pour l'instant) :
+
+python training.py --train_dir dataset/training --val_dir dataset/validation --model_dir model_output --epochs 3 --train_ner
+
+
+4. Exécuter l'inférence sur le jeu de test
+Utilisez cette commande pour appliquer votre modèle entraîné sur le jeu de test :
+
+python inference.py --input_dir dataset/test --model_dir model_output
+
+5. Analyser un exemple spécifique
+Pour analyser une facture spécifique :
+
+python -c "from invoice_model import InvoiceModel; model = InvoiceModel('model_output'); result = model.process_document('dataset/sample/invoice_1.jpg'); print(f'Is invoice: {result[\"is_invoice\"]}'); print(result['fields'])"
+
+
+6. Visualiser les résultats dans la base de données
+Ouvrez phpMyAdmin via http://localhost/phpmyadmin/ et consultez les tables :
+
+invoices pour les résultats d'extraction
+extraction_logs pour l'historique des traitements
+
+

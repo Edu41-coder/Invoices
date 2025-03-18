@@ -1,0 +1,26 @@
+Choix de résolution pour l'entraînement de LayoutLM
+Oui, réduire la résolution à 512x512 peut considérablement accélérer l'entraînement tout en maintenant des résultats satisfaisants.
+
+Impact de la résolution sur l'entraînement
+
+Choix de résolution pour l'entraînement de LayoutLM
+Oui, réduire la résolution à 512x512 peut considérablement accélérer l'entraînement tout en maintenant des résultats satisfaisants.
+
+Impact de la résolution sur l'entraînement
+
+Résolution	Avantages	Inconvénients
+1000x1000	Meilleure précision OCR<br>Détails spatiaux préservés	Très lent (×4 plus lent)<br>Risque d'erreurs mémoire
+512x512	✅ Entraînement 3-4× plus rapide<br>✅ Moins de problèmes mémoire<br>✅ Suffisant pour la plupart des factures	Légère perte de précision OCR
+
+
+Comment l'implémenter
+
+def __getitem__(self, idx):
+    image_path = str(self.image_paths[idx])
+    try:
+        with Image.open(image_path) as img:
+            # Résolution réduite pour accélérer l'entraînement
+            img = img.resize((512, 512))  # Au lieu de 1000x1000
+            processed = self.processor.process_document(image_path, image=img)
+
+

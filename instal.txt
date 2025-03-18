@@ -1,7 +1,0 @@
-pip install faker fpdf2
-
-pip install pdf2image Pillow numpy
-
-pip install pdf2image poppler-utils
-
-`pip install opencv-python

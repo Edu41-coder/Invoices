@@ -46,7 +46,7 @@ class ImageEffects:
             
         return images
         
-    def _place_image_on_document(self, base_img, overlay_img, position_strategy='random', scale_range=(0.2, 0.5)):
+    def _place_image_on_document(self, base_img, overlay_img, position_strategy='random', scale_range=(0.2, 0.5), defect_type=None):
         """
         Place an overlay image on the base image with specified positioning strategy
         
@@ -55,6 +55,7 @@ class ImageEffects:
             overlay_img: PIL Image - The image to overlay (defect, handwriting, etc)
             position_strategy: str - Positioning strategy ('random', 'totals', 'client', 'margin')
             scale_range: tuple - (min_scale, max_scale) for overlay image size
+            defect_type: str - Type of defect being applied ('coffee_stains', 'folds', 'stamps', etc.)
             
         Returns:
             PIL Image - The base image with the overlay applied
@@ -66,12 +67,42 @@ class ImageEffects:
         new_height = int(new_width * (height / width))
         overlay_img = overlay_img.resize((new_width, new_height), Image.LANCZOS)
         
-        # Position overlay according to strategy
-        if position_strategy == 'random':
+        # Traitement spécial pour les plis de coin
+        if defect_type == 'folds' and ('corner' in getattr(overlay_img, 'filename', '') or 'coin' in getattr(overlay_img, 'filename', '')):
+            # Déterminer quel coin utiliser en fonction de l'orientation du pli
+            # Analyser l'image pour déterminer son orientation
+            # (On suppose que la partie la plus claire correspond au coin plié)
+            
+            # Convertir en niveaux de gris pour analyse
+            gray_overlay = overlay_img.convert('L')
+            
+            # Diviser l'image en quatre quadrants pour déterminer où se trouve la partie claire
+            left_top = np.mean(np.array(gray_overlay.crop((0, 0, width//2, height//2))))
+            right_top = np.mean(np.array(gray_overlay.crop((width//2, 0, width, height//2))))
+            left_bottom = np.mean(np.array(gray_overlay.crop((0, height//2, width//2, height))))
+            right_bottom = np.mean(np.array(gray_overlay.crop((width//2, height//2, width, height))))
+            
+            # Déterminer le coin le plus clair
+            quadrants = [left_top, right_top, left_bottom, right_bottom]
+            brightest = quadrants.index(max(quadrants))
+            
+            # Placer le pli dans le coin correspondant
+            if brightest == 0:  # Coin supérieur gauche
+                x, y = 0, 0
+            elif brightest == 1:  # Coin supérieur droit
+                x, y = base_img.width - overlay_img.width, 0
+            elif brightest == 2:  # Coin inférieur gauche
+                x, y = 0, base_img.height - overlay_img.height
+            else:  # Coin inférieur droit
+                x, y = base_img.width - overlay_img.width, base_img.height - overlay_img.height
+        
+        # Position standard pour les autres défauts
+        elif position_strategy == 'random':
             # Position randomly anywhere on the document
             x = random.randint(0, max(1, base_img.width - overlay_img.width))
             y = random.randint(0, max(1, base_img.height - overlay_img.height))
         
+        # Le reste du code reste inchangé...
         elif position_strategy == 'totals':
             # Bottom right - near totals
             x = base_img.width - overlay_img.width - random.randint(10, 50)
@@ -178,7 +209,8 @@ class ImageEffects:
                 img_rgba, 
                 defect,
                 position_strategy='random',
-                scale_range=(0.2, 0.5)
+                scale_range=(0.2, 0.5),
+                defect_type=defect_type  # Passer le type de défaut
             )
         
         # Apply fold effect directly to the image

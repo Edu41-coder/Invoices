@@ -1,0 +1,8 @@
+model_output/
+assets/
+dataset/
+
+# Fichiers Python compilés
+__pycache__/
+*.py[cod]
+*$py.class
