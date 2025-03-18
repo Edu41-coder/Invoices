@@ -1,0 +1,37 @@
+Les dossiers dans votre structure "dataset" ont chacun une fonction spécifique dans le processus de création et d'utilisation des données pour l'apprentissage machine:
+
+Dossiers essentiels pour l'entraînement de modèles ML
+training:
+
+Contient la majorité des documents (typiquement 70-80%)
+Utilisé pour entraîner directement votre modèle d'OCR ou de compréhension de documents
+Ces documents incluent des défauts et variations
+validation:
+
+Ensemble plus petit (typiquement 10-15%)
+Utilisé pendant l'entraînement pour évaluer la précision du modèle et ajuster les hyperparamètres
+Aide à prévenir le surapprentissage
+test:
+
+Ensemble indépendant (typiquement 10-15%)
+Sert à l'évaluation finale du modèle après l'entraînement
+Ne doit jamais être utilisé pendant l'entraînement
+Dossiers utilitaires
+original:
+
+Contient les versions "propres" des documents sans défauts ni altérations
+Utile comme référence ou vérité terrain (ground truth)
+sample:
+
+Contient quelques exemples représentatifs pour visualisation rapide
+Pratique pour démonstrations ou tests rapides
+temp:
+
+Dossier de travail temporaire pour les fichiers intermédiaires
+Utilisé pendant la génération (PDFs avant conversion en images)
+Peut être vidé ou supprimé une fois la génération terminée
+Sont-ils tous nécessaires?
+Absolument nécessaires: training, validation, test (pour un bon workflow ML)
+Recommandés: original (pour référence)
+Optionnels: sample, temp (pour commodité)
+Cette structure est conforme aux bonnes pratiques d'apprentissage automatique, car elle garantit une séparation claire entre les données d'entraînement et d'évaluation.
