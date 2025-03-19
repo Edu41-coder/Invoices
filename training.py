@@ -79,18 +79,7 @@ def main():
     # Create model with specified output directory
     model = InvoiceModel(model_dir=args.model_dir)
     
-    # Train the classifier
-    print(f"Training classifier with {args.epochs} epochs...")
-    model.train_classifier(
-        args.train_dir, 
-        args.val_dir,
-        epochs=args.epochs,
-        batch_size=args.batch_size,
-        learning_rate=args.learning_rate,
-        negative_dir=args.negative_dir or "dataset/training/non_invoices"
-    )
-    
-    # Train the NER model if requested
+    # Choisir quel modèle entraîner
     if args.train_ner:
         print(f"Training NER model with {args.epochs} epochs...")
         model.train_ner_model(
@@ -99,6 +88,17 @@ def main():
             epochs=args.epochs,
             batch_size=args.batch_size,
             learning_rate=args.learning_rate
+        )
+    else:
+        # Train the classifier (default option)
+        print(f"Training classifier with {args.epochs} epochs...")
+        model.train_classifier(
+            args.train_dir, 
+            args.val_dir,
+            epochs=args.epochs,
+            batch_size=args.batch_size,
+            learning_rate=args.learning_rate,
+            negative_dir=args.negative_dir or "dataset/training/non_invoices"
         )
     
     # Mise à jour du fichier de log

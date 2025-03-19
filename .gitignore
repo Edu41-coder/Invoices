@@ -4,5 +4,11 @@ dataset/
 
 # Fichiers Python compilés
 __pycache__/
+*/__pycache__/
+**/__pycache__/
 *.py[cod]
 *$py.class
+*.pyc
+
+# Ajouter aussi les fichiers .pyc générés individuellement
+invoice_generator/*.pyc

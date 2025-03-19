@@ -1,0 +1,512 @@
+Intégration avec Vue.js et conservation de la base de données MySQL
+Oui, vous pouvez parfaitement conserver votre base de données MySQL actuelle lorsque vous intégrez 
+une interface Vue.js à votre système d'analyse de factures.
+ L'architecture fonctionnerait comme suit:
+ Architecture à trois niveaux
+Frontend (Vue.js) <---> Backend (Flask/Python) <---> Base de données MySQL
+
+Comment ça fonctionnerait
+Vue.js (Frontend):
+Interface utilisateur pour télécharger et visualiser les factures
+Communication avec le backend via API REST
+Affichage des résultats d'extraction
+
+Flask (Backend):
+Point d'entrée API pour le frontend
+Utilise votre modèle InvoiceModel existant
+Traite les requêtes et renvoie les données au format JSON
+
+MySQL (Base de données):
+Utilise exactement les mêmes tables que vous avez déjà configurées
+Stocke les résultats d'extraction comme actuellement
+
+Avantages de cette approche
+
+Séparation des responsabilités:
+Le frontend gère uniquement l'interface utilisateur
+Le backend gère le traitement, la logique métier et les accès à la base de données
+
+Réutilisation de votre code existant:
+Votre méthode _store_in_database() fonctionne déjà parfaitement
+Pas besoin de modifier vos tables ou votre logique d'accès aux données
+
+Interface utilisateur améliorée:
+Vue.js offre une expérience interactive et réactive
+Les utilisateurs peuvent voir les résultats d'extraction en temps réel
+Exemple de code servant de pont
+Dans votre API Flask, vous réutiliseriez votre code de base de données existant:
+
+@app.route('/api/analyze', methods=['POST'])
+def analyze_document():
+    # Code de traitement du fichier...
+    
+    # Utiliser votre modèle existant
+    result = model.process_document(file_path)
+    
+    # Le stockage en base de données est déjà géré par votre modèle
+    # dans la méthode _store_in_database qui est appelée par process_document
+    
+    # Vous renverriez simplement le résultat au frontend
+    return jsonify(result)
+
+Fonctionnalités additionnelles possibles
+Avec cette architecture, vous pourriez facilement ajouter:
+Historique des analyses:
+@app.route('/api/history', methods=['GET'])
+def get_history():
+    conn = mysql.connector.connect(**db_config)
+    cursor = conn.cursor(dictionary=True)  # Renvoie les résultats sous forme de dict
+    cursor.execute("SELECT * FROM invoices ORDER BY extraction_date DESC LIMIT 100")
+    invoices = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return jsonify(invoices)
+
+Statistiques sur les extractions:
+
+@app.route('/api/stats', methods=['GET'])
+def get_stats():
+    conn = mysql.connector.connect(**db_config)
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("""
+        SELECT 
+            COUNT(*) as total_processed, 
+            AVG(confidence_score) as avg_confidence,
+            COUNT(CASE WHEN is_invoice = 1 THEN 1 END) as invoices,
+            COUNT(CASE WHEN is_invoice = 0 THEN 1 END) as non_invoices
+        FROM invoices
+    """)
+    stats = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    return jsonify(stats)
+
+
+
+
+
+1. Backend avec Flask et MySQL
+
+@app.route('/api/stats', methods=['GET'])
+def get_stats():
+    conn = mysql.connector.connect(**db_config)
+    cursor = conn.cursor(dictionary=True)  # Parfait pour renvoyer des données JSON
+    cursor.execute("""
+        SELECT 
+            COUNT(*) as total_processed, 
+            AVG(confidence_score) as avg_confidence,
+            COUNT(CASE WHEN is_invoice = 1 THEN 1 END) as invoices,
+            COUNT(CASE WHEN is_invoice = 0 THEN 1 END) as non_invoices
+        FROM invoices
+    """)
+    stats = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    return jsonify(stats)
+
+Cette requête SQL est parfaitement valide et vous permettra d'obtenir des statistiques utiles sur vos factures analysées.
+
+
+2. Frontend Vue.js
+
+<template>
+  <div id="app">
+    <header class="header">
+      <h1>Analyseur de Factures</h1>
+      <p>Système d'extraction intelligent de données de factures</p>
+    </header>
+    
+    <div class="upload-section">
+      <div class="drop-zone" 
+           :class="{ 'active': isDragging }" 
+           @dragover.prevent="isDragging = true"
+           @dragleave="isDragging = false"
+           @drop.prevent="onFileDrop">
+        <div v-if="!file">
+          <i class="fas fa-cloud-upload-alt"></i>
+          <p>Glissez votre facture ici ou</p>
+          <button @click="$refs.fileInput.click()">Sélectionnez un fichier</button>
+          <input ref="fileInput" type="file" style="display:none" @change="onFileSelected" 
+                 accept="image/png, image/jpeg, application/pdf">
+        </div>
+        <div v-else>
+          <p>{{ file.name }}</p>
+          <img v-if="file.type.includes('image')" :src="filePreview" class="preview" />
+          <button @click="analyzeDocument" :disabled="loading" class="analyze-btn">
+            <span v-if="!loading">Analyser la facture</span>
+            <span v-else>Traitement en cours...</span>
+          </button>
+          <button @click="resetForm" class="reset-btn">Annuler</button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="result" class="results-section">
+      <h2>Résultats de l'analyse</h2>
+      
+      <div v-if="!result.is_invoice" class="not-invoice">
+        <h3>Ce document n'est pas une facture</h3>
+        <p>Notre système n'a pas identifié ce document comme étant une facture valide.</p>
+      </div>
+      
+      <div v-else class="invoice-data">
+        <h3>Données extraites</h3>
+        <div class="score-bar">
+          <div class="score-fill" :style="{width: result.fields.confidence_score + '%'}"></div>
+          <span>Score de confiance global: {{ Math.round(result.fields.confidence_score) }}%</span>
+        </div>
+        
+        <table class="data-table">
+          <tr>
+            <th>Champ</th>
+            <th>Valeur</th>
+            <th>Confiance</th>
+          </tr>
+          <tr v-for="(value, key) in displayableFields" :key="key"
+              :class="{ 'uncertain': isUncertain(key) }">
+            <td>{{ fieldLabels[key] || key }}</td>
+            <td>{{ value }}</td>
+            <td>
+              <div class="confidence-indicator" 
+                   :class="getConfidenceClass(key)">
+                {{ getConfidenceScore(key) }}
+              </div>
+            </td>
+          </tr>
+        </table>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script>
+import axios from 'axios';
+
+export default {
+  name: 'App',
+  data() {
+    return {
+      file: null,
+      filePreview: null,
+      isDragging: false,
+      loading: false,
+      result: null,
+      fieldLabels: {
+        invoice_number: "Numéro de facture",
+        date: "Date",
+        client_name: "Nom du client",
+        client_address: "Adresse du client",
+        total_ht: "Total HT",
+        tva: "TVA",
+        total_ttc: "Total TTC",
+        company_name: "Nom de l'entreprise",
+        tva_number: "Numéro de TVA"
+      },
+      thresholds: {
+        invoice_number: 0.7,
+        date: 0.6,
+        client_name: 0.7,
+        client_address: 0.5,
+        total_ht: 0.8,
+        tva: 0.8,
+        total_ttc: 0.8,
+        company_name: 0.7,
+        tva_number: 0.6
+      }
+    };
+  },
+  computed: {
+    displayableFields() {
+      if (!this.result || !this.result.fields) return {};
+      
+      const fields = { ...this.result.fields };
+      delete fields.confidence_score;
+      delete fields.confidence_scores;
+      
+      // Formatter les valeurs numériques
+      if (fields.total_ht) fields.total_ht = `${fields.total_ht.toFixed(2)} €`;
+      if (fields.tva) fields.tva = `${fields.tva.toFixed(2)} €`;
+      if (fields.total_ttc) fields.total_ttc = `${fields.total_ttc.toFixed(2)} €`;
+      
+      return fields;
+    }
+  },
+  methods: {
+    onFileSelected(event) {
+      this.file = event.target.files[0];
+      if (this.file) {
+        this.createPreview();
+      }
+    },
+    onFileDrop(event) {
+      this.isDragging = false;
+      this.file = event.dataTransfer.files[0];
+      if (this.file) {
+        this.createPreview();
+      }
+    },
+    createPreview() {
+      if (this.file.type.includes('image')) {
+        const reader = new FileReader();
+        reader.onload = e => {
+          this.filePreview = e.target.result;
+        };
+        reader.readAsDataURL(this.file);
+      } else {
+        this.filePreview = null;
+      }
+    },
+    async analyzeDocument() {
+      if (!this.file) return;
+      
+      this.loading = true;
+      const formData = new FormData();
+      formData.append('file', this.file);
+      
+      try {
+        const response = await axios.post('http://localhost:5000/api/analyze', formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          }
+        });
+        this.result = response.data;
+      } catch (error) {
+        console.error('Erreur lors de l\'analyse:', error);
+        alert('Erreur lors de l\'analyse du document');
+      } finally {
+        this.loading = false;
+      }
+    },
+    resetForm() {
+      this.file = null;
+      this.filePreview = null;
+      this.result = null;
+    },
+    getConfidenceScore(field) {
+      if (!this.result?.fields?.confidence_scores?.[field]) return 'N/A';
+      const score = this.result.fields.confidence_scores[field];
+      return Math.round(score * 100) + '%';
+    },
+    getConfidenceClass(field) {
+      if (!this.result?.fields?.confidence_scores?.[field]) return 'unknown';
+      const score = this.result.fields.confidence_scores[field];
+      const threshold = this.thresholds[field] || 0.7;
+      
+      if (score >= threshold + 0.1) return 'high';
+      if (score >= threshold) return 'medium';
+      return 'low';
+    },
+    isUncertain(field) {
+      if (!this.result?.fields?.confidence_scores?.[field]) return true;
+      const score = this.result.fields.confidence_scores[field];
+      const threshold = this.thresholds[field] || 0.7;
+      return score < threshold;
+    }
+  }
+}
+</script>
+
+<style>
+/* Styles CSS à ajouter pour une interface moderne */
+#app {
+  font-family: 'Roboto', sans-serif;
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.header {
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+.drop-zone {
+  border: 2px dashed #ccc;
+  border-radius: 8px;
+  padding: 40px;
+  text-align: center;
+  transition: all 0.3s;
+}
+
+.drop-zone.active {
+  border-color: #2c3e50;
+  background: #f8f9fa;
+}
+
+.preview {
+  max-width: 300px;
+  max-height: 300px;
+  margin: 20px 0;
+}
+
+.analyze-btn {
+  background: #42b983;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  margin-right: 10px;
+}
+
+.reset-btn {
+  background: #e74c3c;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.results-section {
+  margin-top: 40px;
+  padding: 20px;
+  background: #f8f9fa;
+  border-radius: 8px;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 20px;
+}
+
+.data-table th, .data-table td {
+  padding: 10px;
+  border-bottom: 1px solid #ddd;
+}
+
+.uncertain {
+  background-color: rgba(255, 240, 200, 0.5);
+}
+
+.confidence-indicator {
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.confidence-indicator.high {
+  background-color: #42b983;
+  color: white;
+}
+
+.confidence-indicator.medium {
+  background-color: #f1c40f;
+  color: black;
+}
+
+.confidence-indicator.low {
+  background-color: #e74c3c;
+  color: white;
+}
+
+.confidence-indicator.unknown {
+  background-color: #95a5a6;
+  color: white;
+}
+
+.score-bar {
+  position: relative;
+  height: 30px;
+  background: #eee;
+  border-radius: 15px;
+  overflow: hidden;
+  margin: 20px 0;
+}
+
+.score-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: #42b983;
+  transition: width 1s;
+}
+
+.score-bar span {
+  position: absolute;
+  width: 100%;
+  text-align: center;
+  line-height: 30px;
+  font-weight: bold;
+  color: #333;
+  z-index: 1;
+}
+</style>
+
+3. Configuration du projet Vue.js
+
+npm install -g @vue/cli
+vue create invoice-analyzer
+cd invoice-analyzer
+npm install axios
+
+Ces commandes initialiseront correctement un projet Vue.js avec Axios pour les appels API.
+
+Points d'amélioration possibles
+Configuration de base de données dans Flask:
+ Vous devriez extraire la configuration de la base de données dans un fichier
+ séparé ou utiliser des variables d'environnement:
+# config.py
+db_config = {
+    'user': 'root',
+    'password': '',  # Utiliser variables d'environnement dans un déploiement réel
+    'host': 'localhost',
+    'database': 'invoice_analyzer'
+}
+
+Gestion des erreurs dans l'API: Ajoutez des blocs try/catch plus détaillés dans vos routes Flask:
+
+@app.route('/api/stats', methods=['GET'])
+def get_stats():
+    try:
+        conn = mysql.connector.connect(**db_config)
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT COUNT(*) as total_processed...")
+        stats = cursor.fetchone()
+        return jsonify({"success": True, "data": stats})
+    except mysql.connector.Error as err:
+        return jsonify({"success": False, "error": str(err)}), 500
+    finally:
+        if 'cursor' in locals() and cursor:
+            cursor.close()
+        if 'conn' in locals() and conn.is_connected():
+            conn.close()
+
+
+Ajout d'un tableau de bord dans Vue.js: Vous pourriez ajouter
+ une vue "Dashboard" qui affiche les statistiques issues de votre endpoint /api/stats.
+
+Structure de fichiers recommandée
+
+project/
+├── backend/
+│   ├── app.py             # API Flask
+│   ├── config.py          # Configuration DB
+│   └── invoice_model.py   # Votre modèle actuel
+│
+└── frontend/
+    ├── public/
+    └── src/
+        ├── App.vue        # Composant principal
+        ├── components/
+        │   ├── UploadForm.vue
+        │   ├── ResultsView.vue
+        │   └── Dashboard.vue
+        └── main.js
+
+
+Déploiement et intégration continue
+Pour finaliser votre application, je vous recommande:
+
+Docker: Créez un Dockerfile pour le backend et un pour le frontend pour faciliter le déploiement.
+
+Tests: Ajoutez des tests unitaires pour vos endpoints Flask et des tests de composants pour Vue.js.
+
+CI/CD: Configurez une intégration continue (GitHub Actions, GitLab CI) pour automatiser les tests et le déploiement.
+
+Votre solution est parfaitement viable et représente une excellente utilisation de l'architecture Web moderne
+ tout en préservant votre travail existant sur la base de données SQL.

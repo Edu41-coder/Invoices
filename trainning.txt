@@ -55,3 +55,12 @@ invoices pour les résultats d'extraction
 extraction_logs pour l'historique des traitements
 
 
+fait dans premier entrainement
+
+python training.py --train_dir dataset/training --val_dir dataset/validation --model_dir model_output --epochs 5 --batch_size 1 --learning_rate 3e-5
+
+1. Entraînement du modèle NER (extraction des champs)
+Cette étape est cruciale pour permettre à votre système d'extraire les informations des factures:
+
+python training.py --train_dir dataset/training --val_dir dataset/validation --model_dir model_output --train_ner --epochs 3 --batch_size 1 --learning_rate 3e-5
+

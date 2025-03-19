@@ -1,0 +1,8 @@
+# Ajouter tous les fichiers modifiés
+git add .
+
+# Créer un commit avec un message descriptif
+git commit -m ""
+
+# Pousser les modifications vers la branche principale du dépôt distant
+git push origin dev

@@ -1,0 +1,86 @@
+Améliorations pour le modèle NER (ner_model_epoch_3)
+
+Les modèles NER sont plus complexes à entraîner que les classifieurs. 
+Voici des stratégies spécifiques pour améliorer votre modèle d'extraction de champs:
+
+1. Créer des annotations réelles (priorité absolue)
+
+# Dans un script séparé pour annoter manuellement quelques exemples
+annotated_data = {
+    "dataset/training/invoices/invoice_1.jpg": {
+        "invoice_number": [(120, 150), "INV-2025001"],
+        "date": [(250, 120), "15/03/2025"],
+        "total_ht": [(450, 350), "1250.00"],
+        # autres champs...
+    },
+    # autres documents...
+}
+
+Même 10-20 documents annotés manuellement amélioreront considérablement les performances.
+
+2. Technique d'apprentissage semi-supervisée
+
+# 1. Utiliser le modèle actuel pour prédire sur des documents non-annotés
+# 2. Filtrer les prédictions avec confiance élevée (>0.8)
+# 3. Ajouter ces "pseudo-annotations" aux données d'entraînement
+# 4. Réentraîner le modèle avec ce dataset augmenté
+
+3. Augmentation de données spécifique au NER
+
+# Dans InvoiceDataset.__getitem__ pour NER
+def augment_for_ner(words, boxes, labels):
+    # 1. Substitution aléatoire de nombres
+    if random.random() > 0.7:
+        for i, word in enumerate(words):
+            if label[i].endswith("TotalHT") or label[i].endswith("TotalTTC"):
+                # Remplacer par un montant similaire
+                if re.match(r"\d+(\.\d+)?", word):
+                    original = float(word)
+                    variation = random.uniform(0.9, 1.1)
+                    words[i] = f"{original * variation:.2f}"
+    
+    # 2. Ajouter bruit aux bounding boxes (simule imprécisions OCR)
+    if random.random() > 0.5:
+        for i in range(len(boxes)):
+            noise = [random.randint(-3, 3) for _ in range(4)]
+            boxes[i] = [max(0, min(b + n, 1000)) for b, n in zip(boxes[i], noise)]
+            
+    return words, boxes, labels
+
+4. Focal Loss pour gérer le déséquilibre des classes
+
+class FocalLoss(nn.Module):
+    def __init__(self, gamma=2.0):
+        super(FocalLoss, self).__init__()
+        self.gamma = gamma
+        
+    def forward(self, logits, target):
+        # Calculer la focal loss qui donne plus de poids aux exemples difficiles
+        ce_loss = F.cross_entropy(logits.view(-1, logits.size(-1)), target.view(-1), reduction='none')
+        pt = torch.exp(-ce_loss)
+        loss = ((1 - pt) ** self.gamma) * ce_loss
+        return loss.mean()
+
+# Utiliser dans l'entraînement
+criterion = FocalLoss(gamma=2.0)
+
+
+5. Règles post-traitement
+
+def post_process_ner(text, predictions):
+    # Règles métier pour corriger les erreurs typiques
+    # Par exemple: formater correctement les montants, dates, etc.
+    for i, pred in enumerate(predictions):
+        if pred == "B-TotalHT" or pred == "B-TotalTTC":
+            # Assurer que c'est un montant valide
+            if not re.match(r"\d+(\.\d+)?", text[i]):
+                # Chercher le nombre le plus proche
+                # ...
+
+
+6. Augmenter le nombre d'epochs
+
+Pour les tâches NER, 8-10 epochs sont souvent nécessaires plutôt que 3.
+
+L'extraction d'entités est une tâche plus complexe que la classification -
+soyez patient et investissez particulièrement dans les annotations manuelles qui auront le plus grand impact.

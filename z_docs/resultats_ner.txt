@@ -1,0 +1,46 @@
+Analyse des résultats d'entraînement NER
+Excellents résultats!
+Ces résultats sont exceptionnellement bons - peut-être même trop bons. Voici pourquoi:
+
+Validation NER...
+NER Epoch 1 - Validation Loss: 0.0040, NER Accuracy: 1.0000
+
+Points à noter:
+Accuracy de 100% (1.0000) après seulement une époque est inhabituel pour des modèles NER, surtout sur des documents complexes comme des factures.
+
+Loss très faible (0.0040) indique que le modèle prédit presque parfaitement chaque token.
+
+Explications possibles:
+1. Overfitting potentiel
+Il est possible que votre ensemble de validation soit trop similaire à l'ensemble d'entraînement, ou qu'il soit trop petit.
+
+2. Labels par défaut
+Si la plupart des tokens sont étiquetés comme "O" (outside), et que votre modèle prédit "O" pour tout, l'accuracy peut sembler élevée.
+
+3. Données de validation non représentatives
+Les documents de validation pourraient être plus simples que ceux rencontrés en production.
+
+Que faire?
+Vérifiez la qualité des données de validation
+Assurez-vous qu'elles contiennent une diversité de formats de factures
+Confirmez que les champs importants sont bien annotés
+
+Testez le modèle sur des exemples réels non vus
+Utilisez quelques factures complètement nouvelles pour vérifier les performances
+
+Continuez l'entraînement
+Les performances sur les époques restantes vous donneront plus d'informations
+Si l'accuracy reste à 100%, c'est un signe d'overfitting
+
+Ajoutez des métriques plus spécifiques
+F1-score par entité serait plus informatif que l'accuracy globale
+Precision/Recall par type de champ
+
+Conclusion
+Ces résultats sont techniquement "bons", mais méritent une investigation supplémentaire. Un modèle parfait après une seule époque est rare dans le NER sur des documents complexes.
+
+Néanmoins, si vous avez une base de données d'entraînement bien construite et des annotations précises,
+ ce n'est pas impossible - surtout si le modèle commence à partir d'un poids pré-entraîné comme LayoutLM 
+ qui a déjà une bonne compréhension des documents.
+
+

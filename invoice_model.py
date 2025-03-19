@@ -223,6 +223,9 @@ class InvoiceProcessor:
         if bbox.shape[-1] != 4:
             raise ValueError(f"Format de bbox incorrect: {bbox.shape}, doit se terminer par 4")
         
+        # NOUVELLE VÉRIFICATION: s'assurer que toutes les valeurs sont dans les limites
+        bbox = torch.clamp(bbox, min=0, max=1000)
+        
         return bbox
 
 
@@ -564,18 +567,44 @@ class InvoiceModel:
         # Training setup
         optimizer = AdamW(self.ner_model.parameters(), lr=learning_rate)
         
+        # Définir la fonction fix_dimensions ici pour qu'elle soit accessible
+        def fix_dimensions(batch):
+            """Corriger les dimensions des tenseurs"""
+            fixed_batch = {}
+            for key, tensor in batch.items():
+                if key in ["input_ids", "attention_mask", "token_type_ids"]:
+                    if len(tensor.shape) == 3:  # Si forme [batch, 1, seq_len]
+                        fixed_batch[key] = tensor.squeeze(1)  # Supprimer la dimension du milieu
+                    else:
+                        fixed_batch[key] = tensor
+                elif key == "bbox":
+                    if len(tensor.shape) == 4 and tensor.shape[1] == 1:  # Si forme [batch, 1, seq_len, 4]
+                        fixed_batch[key] = tensor.squeeze(1)  # Supprimer la dimension excessive
+                    else:
+                        fixed_batch[key] = tensor
+                else:
+                    fixed_batch[key] = tensor
+            return fixed_batch
+
         # Training loop
         self.ner_model.train()
         for epoch in range(epochs):
             print(f"Starting NER training epoch {epoch + 1}/{epochs}")
+            epoch_start = time.time()
+            batch_progress = tqdm(train_dataloader, desc=f"NER Epoch {epoch+1}", unit="batch")
+            batch_count = 0
             total_loss = 0
             
-            for batch in train_dataloader:
+            for batch in batch_progress:
+                batch_count += 1
+                # Corriger les dimensions avant de déplacer vers le GPU
+                batch = fix_dimensions(batch)
+                
                 # Move batch to GPU if available
                 input_ids = batch["input_ids"].to(self.ner_model.device)
                 attention_mask = batch["attention_mask"].to(self.ner_model.device)
                 token_type_ids = batch["token_type_ids"].to(self.ner_model.device)
-                bbox = batch["bbox"].to(self.ner_model.device)
+                bbox = self.standardize_bbox_format(batch["bbox"]).to(self.ner_model.device)
                 labels = batch["labels"].to(self.ner_model.device)
                 
                 # Forward pass
@@ -592,19 +621,31 @@ class InvoiceModel:
                 loss.backward()
                 optimizer.step()
                 optimizer.zero_grad()
+                
+                # Mettre à jour la barre de progression
+                batch_progress.set_postfix(loss=f"{loss.item():.4f}")
+                
+                # Afficher un log toutes les 5 images
+                if batch_count % 5 == 0:
+                    print(f"  • Traité {batch_count}/{len(train_dataloader)} batches, loss: {loss.item():.4f}")
             
-            print(f"Epoch {epoch + 1} - Average training loss: {total_loss / len(train_dataloader):.4f}")
+            epoch_time = time.time() - epoch_start
+            print(f"NER Epoch {epoch+1} terminée en {epoch_time:.2f} secondes")
             
             # Validation
+            print("Validation NER...")
             self.ner_model.eval()
             val_loss = 0
-            
+            val_correct = 0
+            val_total = 0
+
             with torch.no_grad():
                 for batch in val_dataloader:
+                    batch = fix_dimensions(batch)
                     input_ids = batch["input_ids"].to(self.ner_model.device)
                     attention_mask = batch["attention_mask"].to(self.ner_model.device)
                     token_type_ids = batch["token_type_ids"].to(self.ner_model.device)
-                    bbox = batch["bbox"].to(self.ner_model.device)
+                    bbox = self.standardize_bbox_format(batch["bbox"]).to(self.ner_model.device)
                     labels = batch["labels"].to(self.ner_model.device)
                     
                     outputs = self.ner_model(
@@ -616,11 +657,21 @@ class InvoiceModel:
                     )
                     
                     val_loss += outputs.loss.item()
+                    
+                    # Calcul d'accuracy
+                    ner_predictions = torch.argmax(outputs.logits, dim=-1)
+                    valid_mask = attention_mask.bool()
+                    val_correct += ((ner_predictions == labels) & valid_mask).sum().item()
+                    val_total += valid_mask.sum().item()
             
-            print(f"Epoch {epoch + 1} - Validation Loss: {val_loss / len(val_dataloader):.4f}")
+            # Afficher les métriques de validation une seule fois à la fin
+            ner_accuracy = val_correct / val_total if val_total > 0 else 0
+            print(f"NER Epoch {epoch + 1} - Validation Loss: {val_loss / len(val_dataloader):.4f}, NER Accuracy: {ner_accuracy:.4f}")
             
             # Save the model after each epoch
             self.ner_model.save_pretrained(self.model_dir / f"ner_model_epoch_{epoch + 1}")
+            torch.save(self.ner_model.state_dict(), f"{self.model_dir}/ner_model_epoch_{epoch+1}.pt")
+            print(f"Modèle NER sauvegardé: ner_model_epoch_{epoch+1}.pt")
     
     def process_document(self, document_path):
         """Process a document for classification and field extraction"""
